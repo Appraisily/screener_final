@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
-const API_URL = 'https://appraisals-web-services-backend-856401495068.us-central1.run.app';
-const IMAGEKIT_URL = 'https://ik.imagekit.io/appraisily';
+// Use environment variable for API URL
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
 export type AnalysisStep = {
   id: string;
@@ -16,8 +16,7 @@ const initialSteps: AnalysisStep[] = [
     id: 'visual',
     title: 'Visual Search',
     description: 'Find similar artworks',
-    status: 'pending',
-    image: `${IMAGEKIT_URL}/appraisily.com_an_image_for_an_online_art_appraisal_service_tha_6ac023f3-b669-4d66-a044-e2295cf25a1d.png?tr=w-200,h-200`
+    status: 'pending'
   },
   {
     id: 'vision',
@@ -61,32 +60,6 @@ export function useImageAnalysis() {
     );
   };
 
-  const classifyImage = async (imageUrl: string): Promise<'Art' | 'Antique'> => {
-    updateStep('visual', { status: 'processing' });
-    
-    try {
-      const response = await fetch(`${API_URL}/classify-image`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ imageUrl }),
-      });
-
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.message || 'Classification failed');
-      }
-
-      updateStep('visual', { status: 'completed' });
-      return data.classification;
-    } catch (err) {
-      updateStep('visual', { status: 'error' });
-      throw err;
-    }
-  };
-
   const uploadImage = async (file: File) => {
     setError(null);
     setIsUploading(true);
@@ -101,6 +74,7 @@ export function useImageAnalysis() {
       const formData = new FormData();
       formData.append('image', file);
 
+      updateStep('visual', { status: 'processing' });
       const response = await fetch(`${API_URL}/upload-image`, {
         method: 'POST',
         body: formData,
@@ -113,40 +87,14 @@ export function useImageAnalysis() {
       }
 
       setCustomerImage(data.customerImageUrl);
-      
-      // Classify the image
-      const classification = await classifyImage(data.customerImageUrl);
-      setItemType(classification);
+      setSimilarImages(data.similarImageUrls || []);
+      setSessionId(data.sessionId);
+      setItemType(data.itemType || 'Art');
 
-      if (classification === 'Art') {
-        // Process with existing art analysis flow
-        updateStep('vision', { status: 'processing' });
-        const visionResponse = await fetch(`${API_URL}/process-vision`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ imageUrl: data.customerImageUrl }),
-        });
+      updateStep('visual', { status: 'completed' });
+      updateStep('vision', { status: 'completed' });
+      updateStep('similarity', { status: 'completed' });
 
-        const visionData = await visionResponse.json();
-        
-        if (!visionData.success) {
-          throw new Error(visionData.message || 'Vision processing failed');
-        }
-
-        updateStep('vision', { status: 'completed' });
-        updateStep('similarity', { status: 'processing' });
-        
-        setSimilarImages(visionData.similarImageUrls);
-        setSessionId(data.sessionId);
-        
-        updateStep('similarity', { status: 'completed' });
-      } else {
-        // Handle antique flow differently
-        updateStep('vision', { status: 'completed', description: 'Skipped - Antique item detected' });
-        updateStep('similarity', { status: 'completed', description: 'Skipped - Antique item detected' });
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred while uploading the image');
       steps.forEach(step => {
@@ -163,6 +111,7 @@ export function useImageAnalysis() {
     if (!sessionId) return;
 
     setError(null);
+    setIsAnalyzing(true);
     updateStep('analysis', { status: 'processing' });
 
     try {
@@ -171,10 +120,7 @@ export function useImageAnalysis() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          sessionId,
-          itemType 
-        }),
+        body: JSON.stringify({ sessionId }),
       });
 
       const data = await response.json();
@@ -207,8 +153,7 @@ export function useImageAnalysis() {
         },
         body: JSON.stringify({ 
           sessionId,
-          analysisText: analysis,
-          itemType
+          analysisText: analysis 
         }),
       });
 

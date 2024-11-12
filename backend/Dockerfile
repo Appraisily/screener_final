@@ -1,22 +1,24 @@
-# Dockerfile
+# Use Node.js 18 as the base image
+FROM node:18-slim
 
-# Usa una imagen oficial de Node.js
-FROM node:18
+# Set working directory
+WORKDIR /app
 
-# Crear y cambiar al directorio de la app
-WORKDIR /usr/src/app
-
-# Copiar los archivos de dependencia
+# Copy package files
 COPY package*.json ./
 
-# Instalar dependencias
-RUN npm install --only=production
+# Install production dependencies only
+RUN npm ci --only=production
 
-# Copiar el resto de los archivos de la app
+# Copy application code
 COPY . .
 
-# Exponer el puerto
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT=8080
+
+# Expose the port the app runs on
 EXPOSE 8080
 
-# Comando para correr la app
-CMD [ "npm", "start" ]
+# Start the application
+CMD ["node", "index.js"]
