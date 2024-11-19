@@ -35,8 +35,6 @@ Response:
   "success": boolean,
   "sessionId": string,
   "customerImageUrl": string,
-  "similarImageUrls": string[],
-  "itemType": "Art" | "Antique",
   "message": string
 }
 ```
@@ -69,26 +67,10 @@ Response:
   - Handles preflight requests
   - Credential support
 
-- **Static File Serving**
-  - Serves uploaded images via `/uploads` directory
-  - Direct image access via URL
-  - Session-based image retrieval
-
-- **Error Handling**
-  - Comprehensive error messages
-  - Development/production error detail toggling
-  - File type validation
-  - Size limit enforcement
-
-## Storage
-
-Images are stored in the `uploads` directory with the following structure:
-```
-uploads/
-  ├── {sessionId}.jpg
-  ├── {sessionId}.png
-  └── ...
-```
+- **OpenAI Integration**
+  - Uses OpenAI API for image analysis
+  - Secure API key storage in Google Cloud Secret Manager
+  - Secret name: `OPENAI_API_KEY` (Important: This exact name must be used in Secret Manager)
 
 ## Environment Variables
 
@@ -98,48 +80,11 @@ NODE_ENV=development|production
 CORS_ORIGIN=http://localhost:5173 (comma-separated list or regex)
 ```
 
-## Security Features
+## Google Cloud Secret Manager
 
-- File type validation
-- Size limits
-- CORS protection
-- No direct file path exposure
-- Sanitized file names
-- Protected error messages in production
+The application expects the following secrets to be configured in Google Cloud Secret Manager:
 
-## Usage Example
-
-```javascript
-// Upload an image
-const formData = new FormData();
-formData.append('image', imageFile);
-
-const response = await fetch('${API_URL}/upload-image', {
-  method: 'POST',
-  body: formData
-});
-
-const data = await response.json();
-// Use data.customerImageUrl to display the uploaded image
-```
-
-## Error Responses
-
-All error responses follow this structure:
-```json
-{
-  "success": false,
-  "message": "Human-readable error message",
-  "error": "Detailed error info (development only)"
-}
-```
-
-## CORS Configuration
-
-The API supports multiple origin types:
-- Exact matches (e.g., `https://screener.appraisily.com`)
-- Pattern matching for development (e.g., StackBlitz previews)
-- Local development (`http://localhost:5173`)
+- `OPENAI_API_KEY`: Your OpenAI API key (Required)
 
 ## Development
 

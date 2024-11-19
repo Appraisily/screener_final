@@ -31,7 +31,7 @@ async function getSecret(secretName) {
 // Initialize OpenAI with API key from Secret Manager
 async function initializeOpenAI() {
   try {
-    const apiKey = await getSecret('openai-api-key');
+    const apiKey = await getSecret('OPENAI_API_KEY');
     openai = new OpenAI({ apiKey });
     console.log('OpenAI client initialized successfully');
   } catch (error) {
@@ -40,6 +40,7 @@ async function initializeOpenAI() {
   }
 }
 
+// CORS configuration
 const allowedOrigins = [
   'http://localhost:5173',
   'https://appraisily-screener.netlify.app',
@@ -63,7 +64,6 @@ app.use(cors({
     if (isAllowed) {
       callback(null, true);
     } else {
-      console.log('Blocked origin:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -75,37 +75,13 @@ app.use(cors({
 
 app.use(express.json());
 
-// Create uploads directory if it doesn't exist
-const uploadsDir = path.join(__dirname, 'uploads');
-fs.mkdir(uploadsDir, { recursive: true }).catch(console.error);
-
 // Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadsDir);
-  },
-  filename: function (req, file, cb) {
-    const sessionId = uuidv4();
-    const ext = path.extname(file.originalname);
-    cb(null, `${sessionId}${ext}`);
-  }
-});
-
 const upload = multer({
-  storage: storage,
+  storage: multer.memoryStorage(),
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit
-  },
-  fileFilter: (req, file, cb) => {
-    if (!file.mimetype.startsWith('image/')) {
-      return cb(new Error('Only image files are allowed'));
-    }
-    cb(null, true);
   }
 });
-
-// Serve static files from uploads directory
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Health check endpoint
 app.get('/', (req, res) => {
@@ -130,13 +106,22 @@ app.post('/upload-image', upload.single('image'), async (req, res) => {
       mimetype: req.file.mimetype
     });
 
-    const sessionId = path.parse(req.file.filename).name;
-    const imageUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+    const sessionId = uuidv4();
     
+    // Store the image temporarily
+    const uploadDir = path.join(__dirname, 'uploads');
+    await fs.mkdir(uploadDir, { recursive: true });
+    
+    const fileExtension = path.extname(req.file.originalname);
+    const filename = `${sessionId}${fileExtension}`;
+    const filepath = path.join(uploadDir, filename);
+    
+    await fs.writeFile(filepath, req.file.buffer);
+
     res.json({
       success: true,
       sessionId,
-      customerImageUrl: imageUrl,
+      customerImageUrl: `/image/${sessionId}`,
       message: 'Image uploaded successfully'
     });
 
@@ -150,105 +135,26 @@ app.post('/upload-image', upload.single('image'), async (req, res) => {
   }
 });
 
-// Get image by session ID
+// Serve images endpoint
 app.get('/image/:sessionId', async (req, res) => {
   try {
-    const files = await fs.readdir(uploadsDir);
-    const file = files.find(f => f.startsWith(req.params.sessionId));
+    const uploadDir = path.join(__dirname, 'uploads');
+    const files = await fs.readdir(uploadDir);
+    const imageFile = files.find(file => file.startsWith(req.params.sessionId));
     
-    if (!file) {
+    if (!imageFile) {
       return res.status(404).json({
         success: false,
         message: 'Image not found'
       });
     }
 
-    res.sendFile(path.join(uploadsDir, file));
+    res.sendFile(path.join(uploadDir, imageFile));
   } catch (error) {
-    console.error('Error retrieving image:', error);
+    console.error('Error serving image:', error);
     res.status(500).json({
       success: false,
       message: 'Error retrieving image',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-});
-
-// Classify item endpoint
-app.post('/classify-item', async (req, res) => {
-  try {
-    if (!openai) {
-      await initializeOpenAI();
-    }
-
-    const { sessionId } = req.body;
-    if (!sessionId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Session ID is required'
-      });
-    }
-
-    // Find the image file
-    const files = await fs.readdir(uploadsDir);
-    const file = files.find(f => f.startsWith(sessionId));
-    
-    if (!file) {
-      return res.status(404).json({
-        success: false,
-        message: 'Image not found'
-      });
-    }
-
-    const imagePath = path.join(uploadsDir, file);
-    const imageBuffer = await fs.readFile(imagePath);
-
-    // Read classification prompt
-    const promptPath = path.join(__dirname, 'prompts', 'classify-item.txt');
-    const prompt = await fs.readFile(promptPath, 'utf8');
-
-    // Create base64 image
-    const base64Image = imageBuffer.toString('base64');
-    const dataUrl = `data:image/jpeg;base64,${base64Image}`;
-
-    // Call OpenAI API
-    const response = await openai.chat.completions.create({
-      model: "gpt-4-vision-preview",
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: prompt },
-            {
-              type: "image_url",
-              image_url: {
-                url: dataUrl,
-                detail: "low"
-              }
-            }
-          ]
-        }
-      ],
-      max_tokens: 50
-    });
-
-    const classification = response.choices[0].message.content.trim();
-
-    if (classification !== "Art" && classification !== "Antique") {
-      throw new Error('Invalid classification response');
-    }
-
-    res.json({
-      success: true,
-      classification,
-      message: `Item classified as ${classification}`
-    });
-
-  } catch (error) {
-    console.error('Classification error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error classifying item',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
@@ -264,13 +170,19 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Initialize OpenAI before starting the server
-initializeOpenAI().then(() => {
-  const PORT = process.env.PORT || 8080;
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
-}).catch(error => {
-  console.error('Failed to start server:', error);
-  process.exit(1);
-});
+// Start server
+async function startServer() {
+  try {
+    await initializeOpenAI();
+    const PORT = process.env.PORT || 8080;
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      console.log('Allowed origins:', allowedOrigins);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+startServer();
