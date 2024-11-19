@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react';
 
-// Use environment variable for API URL with fallback for production
 const API_URL = import.meta.env.VITE_API_URL || 'https://appraisals-web-services-backend-856401495068.us-central1.run.app';
 
 export type AnalysisStep = {
@@ -12,33 +11,34 @@ export type AnalysisStep = {
 
 const initialSteps: AnalysisStep[] = [
   {
+    id: 'classify',
+    title: 'Item Classification',
+    description: 'Determining if item is Art or Antique',
+    status: 'pending'
+  },
+  {
     id: 'visual',
     title: 'Visual Search',
-    description: 'Find similar artworks',
+    description: 'Find similar items',
     status: 'pending'
   },
   {
     id: 'vision',
     title: 'Visual Analysis',
-    description: 'Processing image with Google Vision AI',
-    status: 'pending'
-  },
-  {
-    id: 'similarity',
-    title: 'Finding Similar Items',
-    description: 'Searching database for similar artworks',
+    description: 'Processing image with AI',
     status: 'pending'
   },
   {
     id: 'analysis',
     title: 'Generating Analysis',
-    description: 'Creating detailed artwork analysis',
+    description: 'Creating detailed item analysis',
     status: 'pending'
   }
 ];
 
 export function useImageAnalysis() {
   const [isUploading, setIsUploading] = useState(false);
+  const [isClassifying, setIsClassifying] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [customerImage, setCustomerImage] = useState<string | null>(null);
@@ -59,6 +59,42 @@ export function useImageAnalysis() {
     );
   };
 
+  const classifyItem = async () => {
+    if (!sessionId) return;
+
+    setError(null);
+    setIsClassifying(true);
+    updateStep('classify', { status: 'processing' });
+
+    try {
+      const response = await fetch(`${API_URL}/classify-item`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ sessionId }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to classify item');
+      }
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.message || 'Classification failed');
+      }
+
+      setItemType(data.classification);
+      updateStep('classify', { status: 'completed' });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to classify item');
+      updateStep('classify', { status: 'error' });
+    } finally {
+      setIsClassifying(false);
+    }
+  };
+
   const uploadImage = async (file: File) => {
     setError(null);
     setIsUploading(true);
@@ -73,8 +109,6 @@ export function useImageAnalysis() {
       const formData = new FormData();
       formData.append('image', file);
 
-      updateStep('visual', { status: 'processing' });
-      
       console.log('Uploading to:', API_URL);
       
       const response = await fetch(`${API_URL}/upload-image`, {
@@ -92,15 +126,11 @@ export function useImageAnalysis() {
         throw new Error(data.message || 'Failed to upload image');
       }
 
-      // Use the actual image URL from the backend
       setCustomerImage(data.customerImageUrl);
-      setSimilarImages(data.similarImageUrls || []);
       setSessionId(data.sessionId);
-      setItemType(data.itemType || 'Art');
 
-      updateStep('visual', { status: 'completed' });
-      updateStep('vision', { status: 'completed' });
-      updateStep('similarity', { status: 'completed' });
+      // After successful upload, start classification
+      await classifyItem();
 
     } catch (err) {
       console.error('Upload error:', err);
@@ -196,10 +226,12 @@ export function useImageAnalysis() {
 
   return {
     uploadImage,
+    classifyItem,
     generateAnalysis,
     enhanceAnalysis,
     fetchImage,
     isUploading,
+    isClassifying,
     isAnalyzing,
     isEnhancing,
     customerImage,

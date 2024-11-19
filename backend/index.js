@@ -4,16 +4,20 @@ const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs').promises;
+const OpenAI = require('openai');
 require('dotenv').config();
 
 const app = express();
 
-// CORS configuration with multiple origins
+// Initialize OpenAI
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
+
 const allowedOrigins = [
   'http://localhost:5173',
   'https://appraisily-screener.netlify.app',
   'https://screener.appraisily.com',
-  // StackBlitz preview domains
   /^https:\/\/[a-z0-9-]+-[a-z0-9]+-[a-z0-9]+\.preview\.app\.github\.dev$/,
   /^https:\/\/[a-z0-9-]+-[a-z0-9]+-[a-z0-9]+\.stackblitz\.io$/,
   /^https:\/\/[a-z0-9-]+--\d+\.local-credentialless\.webcontainer\.io$/
@@ -100,19 +104,13 @@ app.post('/upload-image', upload.single('image'), async (req, res) => {
       mimetype: req.file.mimetype
     });
 
-    const sessionId = path.parse(req.file.filename).name; // Extract sessionId from filename
+    const sessionId = path.parse(req.file.filename).name;
     const imageUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
     
     res.json({
       success: true,
       sessionId,
       customerImageUrl: imageUrl,
-      similarImageUrls: [
-        'https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=500&h=500&fit=crop',
-        'https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=500&h=500&fit=crop',
-        'https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=500&h=500&fit=crop'
-      ],
-      itemType: 'Art',
       message: 'Image uploaded successfully'
     });
 
@@ -150,6 +148,82 @@ app.get('/image/:sessionId', async (req, res) => {
   }
 });
 
+// Classify item endpoint
+app.post('/classify-item', async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    if (!sessionId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Session ID is required'
+      });
+    }
+
+    // Find the image file
+    const files = await fs.readdir(uploadsDir);
+    const file = files.find(f => f.startsWith(sessionId));
+    
+    if (!file) {
+      return res.status(404).json({
+        success: false,
+        message: 'Image not found'
+      });
+    }
+
+    const imagePath = path.join(uploadsDir, file);
+    const imageBuffer = await fs.readFile(imagePath);
+
+    // Read classification prompt
+    const promptPath = path.join(__dirname, 'prompts', 'classify-item.txt');
+    const prompt = await fs.readFile(promptPath, 'utf8');
+
+    // Create base64 image
+    const base64Image = imageBuffer.toString('base64');
+    const dataUrl = `data:image/jpeg;base64,${base64Image}`;
+
+    // Call OpenAI API
+    const response = await openai.chat.completions.create({
+      model: "gpt-4-vision-preview",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            {
+              type: "image_url",
+              image_url: {
+                url: dataUrl,
+                detail: "low"
+              }
+            }
+          ]
+        }
+      ],
+      max_tokens: 50
+    });
+
+    const classification = response.choices[0].message.content.trim();
+
+    if (classification !== "Art" && classification !== "Antique") {
+      throw new Error('Invalid classification response');
+    }
+
+    res.json({
+      success: true,
+      classification,
+      message: `Item classified as ${classification}`
+    });
+
+  } catch (error) {
+    console.error('Classification error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error classifying item',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Global error handler:', err);
@@ -163,5 +237,4 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log('Allowed origins:', allowedOrigins);
 });
