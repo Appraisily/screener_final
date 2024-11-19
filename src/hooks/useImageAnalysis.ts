@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://appraisals-web-services-backend-856401495068.us-central1.run.app';
+const API_URL = import.meta.env.VITE_API_URL;
 
 export type AnalysisStep = {
   id: string;
@@ -110,7 +110,6 @@ export function useImageAnalysis() {
       formData.append('image', file);
 
       console.log('Uploading to:', API_URL);
-      
       const response = await fetch(`${API_URL}/upload-image`, {
         method: 'POST',
         body: formData,
@@ -144,20 +143,6 @@ export function useImageAnalysis() {
       setIsUploading(false);
     }
   };
-
-  const fetchImage = useCallback(async (sessionId: string) => {
-    try {
-      const response = await fetch(`${API_URL}/image/${sessionId}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch image');
-      }
-      const imageUrl = URL.createObjectURL(await response.blob());
-      setCustomerImage(imageUrl);
-    } catch (err) {
-      console.error('Error fetching image:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch image');
-    }
-  }, []);
 
   const generateAnalysis = async () => {
     if (!sessionId) return;
@@ -226,14 +211,13 @@ export function useImageAnalysis() {
 
   return {
     uploadImage,
-    classifyItem,
     generateAnalysis,
     enhanceAnalysis,
-    fetchImage,
+    classifyItem,
     isUploading,
-    isClassifying,
     isAnalyzing,
     isEnhancing,
+    isClassifying,
     customerImage,
     similarImages,
     analysis,

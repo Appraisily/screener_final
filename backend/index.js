@@ -118,10 +118,15 @@ app.post('/upload-image', upload.single('image'), async (req, res) => {
     
     await fs.writeFile(filepath, req.file.buffer);
 
+    // Get the base URL from the request
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+    const baseUrl = `${protocol}://${req.get('host')}`;
+    const imageUrl = `${baseUrl}/image/${sessionId}`;
+
     res.json({
       success: true,
       sessionId,
-      customerImageUrl: `/image/${sessionId}`,
+      customerImageUrl: imageUrl,
       message: 'Image uploaded successfully'
     });
 
