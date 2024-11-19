@@ -75,7 +75,7 @@ export function useImageAnalysis() {
 
       updateStep('visual', { status: 'processing' });
       
-      console.log('Uploading to:', API_URL); // Debug log
+      console.log('Uploading to:', API_URL);
       
       const response = await fetch(`${API_URL}/upload-image`, {
         method: 'POST',
@@ -92,6 +92,7 @@ export function useImageAnalysis() {
         throw new Error(data.message || 'Failed to upload image');
       }
 
+      // Use the actual image URL from the backend
       setCustomerImage(data.customerImageUrl);
       setSimilarImages(data.similarImageUrls || []);
       setSessionId(data.sessionId);
@@ -102,7 +103,7 @@ export function useImageAnalysis() {
       updateStep('similarity', { status: 'completed' });
 
     } catch (err) {
-      console.error('Upload error:', err); // Debug log
+      console.error('Upload error:', err);
       setError(err instanceof Error ? err.message : 'An error occurred while uploading the image');
       steps.forEach(step => {
         if (step.status === 'processing') {
@@ -113,6 +114,20 @@ export function useImageAnalysis() {
       setIsUploading(false);
     }
   };
+
+  const fetchImage = useCallback(async (sessionId: string) => {
+    try {
+      const response = await fetch(`${API_URL}/image/${sessionId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch image');
+      }
+      const imageUrl = URL.createObjectURL(await response.blob());
+      setCustomerImage(imageUrl);
+    } catch (err) {
+      console.error('Error fetching image:', err);
+      setError(err instanceof Error ? err.message : 'Failed to fetch image');
+    }
+  }, []);
 
   const generateAnalysis = async () => {
     if (!sessionId) return;
@@ -183,6 +198,7 @@ export function useImageAnalysis() {
     uploadImage,
     generateAnalysis,
     enhanceAnalysis,
+    fetchImage,
     isUploading,
     isAnalyzing,
     isEnhancing,

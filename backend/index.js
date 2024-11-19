@@ -2,6 +2,8 @@ const express = require('express');
 const multer = require('multer');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
+const path = require('path');
+const fs = require('fs').promises;
 require('dotenv').config();
 
 const app = express();
@@ -19,10 +21,8 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: function(origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    // Check if the origin matches any of our allowed patterns
     const isAllowed = allowedOrigins.some(allowed => {
       if (allowed instanceof RegExp) {
         return allowed.test(origin);
@@ -33,25 +33,49 @@ app.use(cors({
     if (isAllowed) {
       callback(null, true);
     } else {
-      console.log('Blocked origin:', origin); // Debug log
+      console.log('Blocked origin:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
-  maxAge: 86400 // CORS preflight cache for 24 hours
+  maxAge: 86400
 }));
 
 app.use(express.json());
 
-// Initialize multer for file uploads
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
+// Create uploads directory if it doesn't exist
+const uploadsDir = path.join(__dirname, 'uploads');
+fs.mkdir(uploadsDir, { recursive: true }).catch(console.error);
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadsDir);
+  },
+  filename: function (req, file, cb) {
+    const sessionId = uuidv4();
+    const ext = path.extname(file.originalname);
+    cb(null, `${sessionId}${ext}`);
   }
 });
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) {
+      return cb(new Error('Only image files are allowed'));
+    }
+    cb(null, true);
+  }
+});
+
+// Serve static files from uploads directory
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Health check endpoint
 app.get('/', (req, res) => {
@@ -60,7 +84,7 @@ app.get('/', (req, res) => {
 
 // Upload image endpoint
 app.post('/upload-image', upload.single('image'), async (req, res) => {
-  console.log('Received upload request from origin:', req.headers.origin); // Debug log
+  console.log('Received upload request from origin:', req.headers.origin);
   
   try {
     if (!req.file) {
@@ -76,13 +100,13 @@ app.post('/upload-image', upload.single('image'), async (req, res) => {
       mimetype: req.file.mimetype
     });
 
-    // For now, just return the file info
-    const sessionId = uuidv4();
+    const sessionId = path.parse(req.file.filename).name; // Extract sessionId from filename
+    const imageUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
     
     res.json({
       success: true,
       sessionId,
-      customerImageUrl: 'https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=500&h=500&fit=crop',
+      customerImageUrl: imageUrl,
       similarImageUrls: [
         'https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=500&h=500&fit=crop',
         'https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=500&h=500&fit=crop',
@@ -97,6 +121,30 @@ app.post('/upload-image', upload.single('image'), async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error uploading image',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Get image by session ID
+app.get('/image/:sessionId', async (req, res) => {
+  try {
+    const files = await fs.readdir(uploadsDir);
+    const file = files.find(f => f.startsWith(req.params.sessionId));
+    
+    if (!file) {
+      return res.status(404).json({
+        success: false,
+        message: 'Image not found'
+      });
+    }
+
+    res.sendFile(path.join(uploadsDir, file));
+  } catch (error) {
+    console.error('Error retrieving image:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error retrieving image',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }

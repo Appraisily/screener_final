@@ -57,6 +57,10 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({ onUpload, isUploading, cu
                 src={customerImage}
                 alt="Uploaded artwork"
                 className="w-full h-auto rounded-lg shadow-lg transition-transform duration-200 hover:-translate-y-1"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.src = 'https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=500&h=500&fit=crop';
+                }}
               />
               {isUploading && (
                 <div className="absolute inset-0 flex items-center justify-center bg-white/80 backdrop-blur-sm rounded-lg">
