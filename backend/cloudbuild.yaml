@@ -29,8 +29,14 @@ steps:
       - '0'
       - '--max-instances'
       - '10'
+      - '--port'
+      - '8080'
       - '--set-env-vars'
-      - 'NODE_ENV=production'
+      - 'NODE_ENV=production,GCS_BUCKET_NAME=images_free_reports'
+      - '--set-secrets'
+      - 'GOOGLE_CLOUD_PROJECT_ID=project-id:latest,OPENAI_API_KEY=openai-api-key:latest'
+      - '--service-account'
+      - 'appraisals-backend@civil-forge-403609.iam.gserviceaccount.com'
 
 images:
   - 'gcr.io/$PROJECT_ID/appraisals-web-services-backend:$COMMIT_SHA'

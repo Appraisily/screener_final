@@ -6,6 +6,7 @@ const vision = require('@google-cloud/vision');
 const fetch = require('node-fetch');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
+require('dotenv').config();
 
 // Initialize Express app
 const app = express();
@@ -14,14 +15,14 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Environment variables
+// Environment variables with defaults
 const {
   PORT = 8080,
   GOOGLE_CLOUD_PROJECT_ID,
-  GCS_BUCKET_NAME,
+  GCS_BUCKET_NAME = 'images_free_reports',
   OPENAI_API_KEY,
-  NODE_ENV = 'development',
-  CORS_ORIGIN = 'http://localhost:5173'
+  NODE_ENV = 'production',
+  CORS_ORIGIN = '*'
 } = process.env;
 
 // Initialize multer for file uploads
@@ -36,7 +37,19 @@ const upload = multer({
 const storage = new Storage({
   projectId: GOOGLE_CLOUD_PROJECT_ID,
 });
-const bucket = storage.bucket(GCS_BUCKET_NAME);
+
+let bucket;
+try {
+  bucket = storage.bucket(GCS_BUCKET_NAME);
+  console.log(`Successfully connected to bucket: ${GCS_BUCKET_NAME}`);
+} catch (error) {
+  console.error('Error initializing storage bucket:', error);
+}
+
+// Health check endpoint
+app.get('/', (req, res) => {
+  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
 
 // Upload image endpoint
 app.post('/upload-image', upload.single('image'), async (req, res) => {
@@ -48,7 +61,8 @@ app.post('/upload-image', upload.single('image'), async (req, res) => {
       });
     }
 
-    const file = bucket.file(`uploads/${uuidv4()}-${req.file.originalname}`);
+    // Store in images_free_reports folder within the bucket
+    const file = bucket.file(`images_free_reports/${uuidv4()}-${req.file.originalname}`);
     const imageBuffer = req.file.buffer;
 
     await file.save(imageBuffer, {
@@ -152,6 +166,15 @@ app.post('/classify-item', async (req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM signal received: closing HTTP server');
+  server.close(() => {
+    console.log('HTTP server closed');
+    process.exit(0);
+  });
 });
