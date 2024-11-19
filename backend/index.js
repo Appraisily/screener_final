@@ -10,7 +10,11 @@ const app = express();
 const allowedOrigins = [
   'http://localhost:5173',
   'https://appraisily-screener.netlify.app',
-  'https://screener.appraisily.com'
+  'https://screener.appraisily.com',
+  // StackBlitz preview domains
+  /^https:\/\/[a-z0-9-]+-[a-z0-9]+-[a-z0-9]+\.preview\.app\.github\.dev$/,
+  /^https:\/\/[a-z0-9-]+-[a-z0-9]+-[a-z0-9]+\.stackblitz\.io$/,
+  /^https:\/\/[a-z0-9-]+--\d+\.local-credentialless\.webcontainer\.io$/
 ];
 
 app.use(cors({
@@ -18,15 +22,25 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    if (allowedOrigins.indexOf(origin) !== -1) {
+    // Check if the origin matches any of our allowed patterns
+    const isAllowed = allowedOrigins.some(allowed => {
+      if (allowed instanceof RegExp) {
+        return allowed.test(origin);
+      }
+      return allowed === origin;
+    });
+
+    if (isAllowed) {
       callback(null, true);
     } else {
+      console.log('Blocked origin:', origin); // Debug log
       callback(new Error('Not allowed by CORS'));
     }
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
+  credentials: true,
+  maxAge: 86400 // CORS preflight cache for 24 hours
 }));
 
 app.use(express.json());
@@ -46,6 +60,8 @@ app.get('/', (req, res) => {
 
 // Upload image endpoint
 app.post('/upload-image', upload.single('image'), async (req, res) => {
+  console.log('Received upload request from origin:', req.headers.origin); // Debug log
+  
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -53,6 +69,12 @@ app.post('/upload-image', upload.single('image'), async (req, res) => {
         message: 'No file uploaded'
       });
     }
+
+    console.log('File received:', {
+      filename: req.file.originalname,
+      size: req.file.size,
+      mimetype: req.file.mimetype
+    });
 
     // For now, just return the file info
     const sessionId = uuidv4();
@@ -80,7 +102,18 @@ app.post('/upload-image', upload.single('image'), async (req, res) => {
   }
 });
 
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Global error handler:', err);
+  res.status(500).json({
+    success: false,
+    message: 'Internal server error',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+});
+
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log('Allowed origins:', allowedOrigins);
 });

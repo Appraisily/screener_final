@@ -13,7 +13,10 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({ onUpload, isUploading, cu
       e.preventDefault();
       const file = e.dataTransfer.files[0];
       if (file && file.type.startsWith('image/')) {
+        console.log('Dropped file:', file.name, 'Size:', file.size, 'Type:', file.type);
         onUpload(file);
+      } else {
+        console.warn('Invalid file type:', file?.type);
       }
     },
     [onUpload]
@@ -23,11 +26,18 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({ onUpload, isUploading, cu
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (file) {
+        console.log('Selected file:', file.name, 'Size:', file.size, 'Type:', file.type);
         onUpload(file);
       }
     },
     [onUpload]
   );
+
+  const handleClick = () => {
+    if (!isUploading) {
+      console.log('Upload button clicked, opening file selector');
+    }
+  };
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -95,6 +105,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({ onUpload, isUploading, cu
                      ${isUploading 
                        ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
                        : 'bg-[rgb(0,123,255)] text-white hover:bg-[rgb(0,123,255)]/90'}`}
+            onClick={handleClick}
           >
             <ImageIcon className="w-4 h-4" />
             {customerImage ? 'Upload Another Image' : 'Select Image'}
