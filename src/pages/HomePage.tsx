@@ -1,8 +1,7 @@
 import React from 'react';
-import { Upload, Image as ImageIcon, Loader2, AlertCircle, Zap, Clock, Lock } from 'lucide-react';
+import { ArrowRight, ArrowLeft, AlertCircle } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import ImageUploader from '../components/ImageUploader';
-import ResultsDisplay from '../components/ResultsDisplay';
 import Services from '../components/Services';
 import { useImageAnalysis } from '../hooks/useImageAnalysis';
 import { useTawkTo } from '../hooks/useTawkTo';
@@ -12,20 +11,13 @@ function HomePage() {
 
   const {
     uploadImage,
-    generateAnalysis,
-    enhanceAnalysis,
+    proceedToNextStep,
+    goToPreviousStep,
     isUploading,
-    isAnalyzing,
-    isEnhancing,
     customerImage,
-    similarImages,
-    analysis,
-    enhancedAnalysis,
-    offerText,
     error,
-    steps,
     itemType,
-    activeService
+    currentStep
   } = useImageAnalysis();
 
   return (
@@ -45,34 +37,14 @@ function HomePage() {
               <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600">
                 AI Art Screener
               </h1>
-              <p className="text-2xl font-semibold mt-2 text-[rgb(0,123,255)]">
-                Instant Artwork Analysis
+              <p className="text-2xl font-semibold mt-2 text-[#007bff]">
+                Interactive Analysis Tool
               </p>
             </div>
 
-            <p className="mt-6 text-lg leading-8 text-gray-600 mb-8">
-              Our advanced AI tools analyze your artwork from multiple angles to provide comprehensive insights.
+            <p className="mt-6 text-lg leading-8 text-gray-600">
+              Upload your item and follow our step-by-step analysis process to discover its details and value
             </p>
-
-            {!customerImage && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:border-[rgb(0,123,255)] transition-colors">
-                  <Zap className="w-6 h-6 text-[rgb(0,123,255)] mb-3" />
-                  <h3 className="font-semibold text-gray-900 mb-2">Multi-Tool Analysis</h3>
-                  <p className="text-sm text-gray-600">Six specialized AI tools work together to analyze your artwork.</p>
-                </div>
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:border-[rgb(0,123,255)] transition-colors">
-                  <Lock className="w-6 h-6 text-[rgb(0,123,255)] mb-3" />
-                  <h3 className="font-semibold text-gray-900 mb-2">Secure Processing</h3>
-                  <p className="text-sm text-gray-600">Your artwork is analyzed securely with state-of-the-art encryption.</p>
-                </div>
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:border-[rgb(0,123,255)] transition-colors">
-                  <Clock className="w-6 h-6 text-[rgb(0,123,255)] mb-3" />
-                  <h3 className="font-semibold text-gray-900 mb-2">Real-time Results</h3>
-                  <p className="text-sm text-gray-600">Watch as each tool analyzes your artwork in real-time.</p>
-                </div>
-              </div>
-            )}
           </header>
 
           {error && (
@@ -83,40 +55,40 @@ function HomePage() {
           )}
 
           <div className="space-y-12">
-            {!customerImage && (
-              <>
-                <div className="text-center mb-8">
-                  <h2 className="text-2xl font-bold text-gray-900 mb-4">Start Your Analysis</h2>
-                  <p className="text-lg text-gray-600">
-                    Upload your artwork to begin the comprehensive AI analysis process.
-                  </p>
-                </div>
-                <Services />
-              </>
-            )}
-
             <ImageUploader 
               onUpload={uploadImage}
               isUploading={isUploading}
               customerImage={customerImage}
             />
 
-            {customerImage && (
-              <div className="space-y-16">
-                <Services activeService={activeService} />
-                <ResultsDisplay 
-                  similarImages={similarImages}
-                  analysis={analysis}
-                  enhancedAnalysis={enhancedAnalysis}
-                  offerText={offerText}
-                  onGenerateAnalysis={generateAnalysis}
-                  onEnhanceAnalysis={enhanceAnalysis}
-                  isAnalyzing={isAnalyzing}
-                  isEnhancing={isEnhancing}
-                  steps={steps}
+            {itemType && (
+              <>
+                <Services 
                   itemType={itemType}
+                  currentStep={currentStep}
                 />
-              </div>
+
+                <div className="flex justify-center gap-4">
+                  {currentStep > 1 && (
+                    <button
+                      onClick={goToPreviousStep}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#007bff]/5 text-[#007bff] hover:bg-[#007bff]/10 transition-colors"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                      Previous Step
+                    </button>
+                  )}
+                  {currentStep < 4 && (
+                    <button
+                      onClick={proceedToNextStep}
+                      className="inline-flex items-center justify-center px-6 py-3 rounded-md bg-[#007bff] text-white hover:bg-[#0056b3] transition-colors gap-2 shadow-lg shadow-blue-500/20"
+                    >
+                      Next Step
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </>
             )}
           </div>
         </div>
