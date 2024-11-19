@@ -5,14 +5,40 @@ const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs').promises;
 const OpenAI = require('openai');
+const { SecretManagerServiceClient } = require('@google-cloud/secret-manager');
 require('dotenv').config();
 
 const app = express();
+let openai;
 
-// Initialize OpenAI
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+// Initialize Secret Manager client
+const secretManager = new SecretManagerServiceClient();
+
+// Function to get secret from Secret Manager
+async function getSecret(secretName) {
+  try {
+    const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID || 'civil-forge-403609';
+    const name = `projects/${projectId}/secrets/${secretName}/versions/latest`;
+    
+    const [version] = await secretManager.accessSecretVersion({ name });
+    return version.payload.data.toString('utf8');
+  } catch (error) {
+    console.error(`Error retrieving secret ${secretName}:`, error);
+    throw error;
+  }
+}
+
+// Initialize OpenAI with API key from Secret Manager
+async function initializeOpenAI() {
+  try {
+    const apiKey = await getSecret('openai-api-key');
+    openai = new OpenAI({ apiKey });
+    console.log('OpenAI client initialized successfully');
+  } catch (error) {
+    console.error('Failed to initialize OpenAI client:', error);
+    throw error;
+  }
+}
 
 const allowedOrigins = [
   'http://localhost:5173',
@@ -151,6 +177,10 @@ app.get('/image/:sessionId', async (req, res) => {
 // Classify item endpoint
 app.post('/classify-item', async (req, res) => {
   try {
+    if (!openai) {
+      await initializeOpenAI();
+    }
+
     const { sessionId } = req.body;
     if (!sessionId) {
       return res.status(400).json({
@@ -234,7 +264,13 @@ app.use((err, req, res, next) => {
   });
 });
 
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+// Initialize OpenAI before starting the server
+initializeOpenAI().then(() => {
+  const PORT = process.env.PORT || 8080;
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}).catch(error => {
+  console.error('Failed to start server:', error);
+  process.exit(1);
 });
