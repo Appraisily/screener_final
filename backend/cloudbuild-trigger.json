@@ -1,0 +1,19 @@
+{
+  "name": "appraisals-backend-deploy",
+  "description": "Deploy backend to Cloud Run on changes to main branch",
+  "filename": "backend/cloudbuild.yaml",
+  "github": {
+    "owner": "Appraisily",
+    "name": "screener_final",
+    "push": {
+      "branch": "^main$"
+    }
+  },
+  "includedFiles": [
+    "backend/**"
+  ],
+  "substitutions": {
+    "_REGION": "us-central1",
+    "_SERVICE_NAME": "appraisals-web-services-backend"
+  }
+}
